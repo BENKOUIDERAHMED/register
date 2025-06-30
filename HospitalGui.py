@@ -1,211 +1,25 @@
-import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
-import sqlite3
+import tkinter as tk
+from HospitalClass import Hospital
 from tkcalendar import DateEntry
-import pandas as pd
 from datetime import datetime
 from PIL import Image, ImageTk
 import os
 import json
-
-# Database class for managing patients
-class Hospital:
-    def __init__(self, db_file="patients.db"):
-        self.db_file = db_file
-        self.setup_database()
-        
-    def setup_database(self):
-        conn = sqlite3.connect(self.db_file)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS patients (
-                ID INTEGER PRIMARY KEY AUTOINCREMENT,
-                FirstName TEXT NOT NULL,
-                LastName TEXT NOT NULL,
-                Age INTEGER NOT NULL,
-                Gender TEXT NOT NULL,   
-                Condition TEXT,
-                Contact TEXT,
-                Photos TEXT,
-                AppointmentDate TEXT,
-                DateAdded TEXT DEFAULT CURRENT_TIMESTAMP,
-                LastModified TEXT DEFAULT CURRENT_TIMESTAMP,
-                Deleted INTEGER DEFAULT 0
-            )
-        ''')
-        
-        # Check if Photos and AppointmentDate columns exist, if not add them
-        cursor.execute("PRAGMA table_info(patients)")
-        columns = [column[1] for column in cursor.fetchall()]
-        
-        if 'Photos' not in columns:
-            cursor.execute("ALTER TABLE patients ADD COLUMN Photos TEXT")
-        if 'AppointmentDate' not in columns:
-            cursor.execute("ALTER TABLE patients ADD COLUMN AppointmentDate TEXT")
-        
-        conn.commit()
-        conn.close()
-    
-    def get_all_patients(self):
-        try:
-            conn = sqlite3.connect(self.db_file)
-            # Order by ID DESC to show newest first
-            df = pd.read_sql_query("SELECT * FROM patients WHERE Deleted = 0 ORDER BY ID DESC LIMIT 3000", conn)
-            conn.close()
-            return df
-        except Exception as e:
-            messagebox.showerror("خطأ", f"حدث خطأ أثناء تحميل المرضى: {e}")
-            return pd.DataFrame()
-    
-    def get_total_patients(self):
-        conn = sqlite3.connect(self.db_file)
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM patients WHERE Deleted = 0")
-        total = cursor.fetchone()[0]
-        conn.close()
-        return total
-    
-    def search_patients(self, search_term, page=1, per_page=50):
-        query = "SELECT * FROM patients WHERE Deleted = 0"
-        params = []
-        
-        if search_term:
-            query += " AND (LOWER(FirstName) LIKE ? OR LOWER(LastName) LIKE ? OR LOWER(Condition) LIKE ? OR LOWER(Contact) LIKE ?)"
-            params.extend([f'%{search_term.lower()}%'] * 4)
-        
-        # Order by ID DESC to show newest first
-        query += " ORDER BY ID DESC LIMIT ? OFFSET ?"
-        offset = (page - 1) * per_page
-        params.extend([per_page, offset])
-        
-        try:
-            conn = sqlite3.connect(self.db_file)
-            df = pd.read_sql_query(query, conn, params=params)
-            conn.close()
-            return df
-        except Exception as e:
-            messagebox.showerror("خطأ", f"حدث خطأ أثناء البحث: {e}")
-            return pd.DataFrame()
-    
-    def add_patient(self, data):
-        try:
-            # Convert Age to integer
-            try:
-                age = int(data["Age"])
-            except ValueError:
-                messagebox.showerror("خطأ", "العمر يجب أن يكون رقماً صحيحاً")
-                return None
-
-            # Convert photos list to JSON string
-            photos_json = json.dumps(data.get("Photos", []))
-
-            conn = sqlite3.connect(self.db_file)
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO patients (FirstName, LastName, Age, Gender, Condition, Contact, Photos, AppointmentDate)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (data["FirstName"], data["LastName"], age, data["Gender"], 
-                  data.get("Condition", None), data.get("Contact", None), 
-                  photos_json, data.get("AppointmentDate", None)))
-            conn.commit()
-            new_id = cursor.lastrowid
-            conn.close()
-            return new_id
-        except Exception as e:
-            messagebox.showerror("خطأ", f"فشل في إضافة المريض: {e}")
-            return None
-    
-    def update_patient(self, patient_id, new_data):
-        try:
-            # Convert Age to integer
-            try:
-                age = int(new_data["Age"])
-            except ValueError:
-                messagebox.showerror("خطأ", "العمر يجب أن يكون رقماً صحيحاً")
-                return False
-
-            # Convert photos list to JSON string
-            photos_json = json.dumps(new_data.get("Photos", []))
-
-            conn = sqlite3.connect(self.db_file)
-            cursor = conn.cursor()
-            cursor.execute("""
-                UPDATE patients 
-                SET FirstName=?, LastName=?, Age=?, Gender=?, Condition=?, Contact=?, Photos=?, AppointmentDate=?, LastModified=CURRENT_TIMESTAMP
-                WHERE ID=?
-            """, (new_data["FirstName"], new_data["LastName"], age, new_data["Gender"], 
-                  new_data.get("Condition", None), new_data.get("Contact", None), 
-                  photos_json, new_data.get("AppointmentDate", None), patient_id))
-            conn.commit()
-            rows_affected = cursor.rowcount
-            conn.close()
-            return rows_affected > 0
-        except Exception as e:
-            messagebox.showerror("خطأ", f"حدث خطأ أثناء التحديث: {e}")
-            return False
-    
-    def delete_patient(self, patient_id):
-        try:
-            conn = sqlite3.connect(self.db_file)
-            cursor = conn.cursor()
-            cursor.execute("UPDATE patients SET Deleted = 1 WHERE ID=?", (patient_id,))
-            conn.commit()
-            conn.close()
-        except Exception as e:
-            messagebox.showerror("خطأ", f"حدث خطأ أثناء الحذف: {e}")
-    
-    def export_data(self, file_path):
-        df = self.get_all_patients()
-        df.to_excel(file_path, index=False)
-    
-    def import_data(self, file_path):
-        try:
-            df = pd.read_excel(file_path)
-            conn = sqlite3.connect(self.db_file)
-            cursor = conn.cursor()
-            
-            expected_columns = ["FirstName", "LastName", "Age", "Gender", "Condition", "Contact"]
-            if not all(col in df.columns for col in expected_columns[:4]):
-                messagebox.showerror("خطأ", "يجب أن يحتوي ملف الإكسل على الأعمدة: الاسم الأول، اسم العائلة، العمر، الجنس")
-                return False
-            
-            for _, row in df.iterrows():
-                # Ensure Age is an integer
-                try:
-                    age = int(row["Age"])
-                except (ValueError, TypeError):
-                    continue  # Skip invalid rows
-                cursor.execute("""
-                    INSERT INTO patients (FirstName, LastName, Age, Gender, Condition, Contact, Photos, AppointmentDate)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (row["FirstName"], row["LastName"], age, row["Gender"], 
-                      row.get("Condition", None), row.get("Contact", None), 
-                      json.dumps([]), row.get("AppointmentDate", None)))
-            
-            conn.commit()
-            conn.close()
-            return True
-        except Exception as e:
-            messagebox.showerror("خطأ", f"حدث خطأ أثناء الاستيراد: {e}")
-            return False
-
-# GUI class for the hospital management system
-class HospitalGUI:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("نظام إدارة المستشفى")
-        self.root.geometry("1200x700")
+class HospitalGUI(tk.Frame):
+    def __init__(self, parent, controller):
+        super().__init__(parent)
         self.hospitals = {}
         self.current_hospital = None
-        self.create_toolbar()
-        self.notebook = ttk.Notebook(self.root)
+        self.create_toolbar(controller)
+        self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill="both", expand=True)
         self.add_database("Default Database")
 
-    def create_toolbar(self):
-        toolbar = ttk.Frame(self.root)
+    def create_toolbar(self , controller):
+        toolbar = ttk.Frame(self)
         toolbar.pack(side="top", fill="x")
+        ttk.Button(toolbar, text="الرئيسية", command=lambda: controller.show_frame("AppointmentApp")).pack(side="left", padx=5, pady=5)
         ttk.Button(toolbar, text="تحديث", command=self.load_patients).pack(side="left", padx=5, pady=5)
         ttk.Button(toolbar, text="إضافة قاعدة بيانات", command=self.add_database_dialog).pack(side="left", padx=5, pady=5)
         self.search_entry = ttk.Entry(toolbar, width=30)
@@ -331,11 +145,9 @@ class HospitalGUI:
 
     def on_tree_click(self, event):
         item = self.tree.identify_row(event.y)
-        column = self.tree.identify_column(event.x)
-        if item and column == "#1":
-            current_value = self.tree.item(item, "values")[0]
-            new_value = "✔" if current_value != "✔" else ""
-            self.tree.set(item, "Select", new_value)
+        current_value = self.tree.item(item, "values")[0]
+        new_value = "✔" if current_value != "✔" else "x"
+        self.tree.set(item, "Select", new_value)
     
     def on_double_click(self, event):
         item = self.tree.identify_row(event.y)
@@ -352,7 +164,7 @@ class HospitalGUI:
             self.delete_btn["state"] = "disabled"
     
     def open_add_patient_window(self):
-        add_window = tk.Toplevel(self.root)
+        add_window = tk.Toplevel(self.master)
         add_window.title("إضافة مريض")
         add_window.geometry("700x600")
         add_window.transient(self.root)
@@ -724,12 +536,13 @@ class HospitalGUI:
         
         return errors
     
-    def delete_patient(self):
-        if not self.current_hospital:
+    def delete_patient(self ):
+        if  self.current_hospital is None:
             messagebox.showerror("خطأ", "لم يتم اختيار قاعدة بيانات")
             return
+        #self.tree.item(selected[0], "values")[2]
         selected_items = [item for item in self.tree.get_children() if self.tree.item(item, "values")[0] == "✔"]
-        if selected_items:
+        if len(selected_items) > 0:
             if messagebox.askyesno("تأكيد", f"حذف {len(selected_items)} مريض؟"):
                 for item in selected_items:
                     patient_id = int(self.tree.item(item, "values")[2])
@@ -755,8 +568,3 @@ class HospitalGUI:
                     messagebox.showerror("خطأ", "فشل في استيراد البيانات. يرجى التحقق من تنسيق الملف.")
             except Exception as e:
                 messagebox.showerror("خطأ", f"حدث خطأ أثناء الاستيراد: {e}")
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = HospitalGUI(root)
-    root.mainloop()
