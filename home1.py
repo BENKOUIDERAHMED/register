@@ -1,31 +1,32 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 from datetime import datetime
 from tkcalendar import DateEntry
+from AppointmentClass import Appointment 
+from HospitalClass1 import Hospital
 
 class AppointmentApp(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
-        self.controller = controller  # حفظ المرجع للتحكم في التنقل بين الواجهات
-
-        # Style
+        self.controller = controller
+        self.appointment_handler = Appointment("patients.db")
+        self.hospital_handler = Hospital("patients.db")
+        self.current_patient_id = None
         style = ttk.Style(self)
         style.theme_use('vista')
         style.configure("TLabel", font=("Arial", 11))
         style.configure("TButton", font=("Arial", 10))
         style.configure("TEntry", font=("Arial", 11))
         style.configure("TLabelframe.Label", font=("Arial", 12, "bold"))
-
         self.configure(bg="#e0e0e0")
-
-        self.appointment_id = 1
+        self.appointment_id = self.appointment_handler.count() + 1
         self.entry_widgets = {}
 
         self.create_top_bar()
         self.create_main_content()
         self.update_time()
 
-    def create_top_bar(self ):
+    def create_top_bar(self):
         top_bar = tk.Frame(self, bg="#c5d6e2", height=40)
         ttk.Button(top_bar, text="ادارة", command=lambda: self.controller.show_frame("HospitalGUI")).pack(side="left", padx=5, pady=5)
         top_bar.pack(fill="x", side="top")
@@ -44,6 +45,7 @@ class AppointmentApp(tk.Frame):
         main_frame.rowconfigure(0, weight=1)
         main_frame.rowconfigure(1, weight=2)
         main_frame.rowconfigure(2, weight=0)
+
         patient_info_frame = self.create_frame(main_frame, "بيانات المريض")
         patient_info_frame.grid(row=0, column=1, rowspan=2, sticky="nsew", padx=5, pady=5)
         appointment_details_frame = self.create_frame(main_frame, "تفاصيل الموعد")
@@ -52,6 +54,7 @@ class AppointmentApp(tk.Frame):
         notes_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
         buttons_frame = tk.Frame(main_frame, bg=self['bg'])
         buttons_frame.grid(row=2, column=0, columnspan=2, sticky="ew", pady=10)
+
         self.create_patient_info_widgets(patient_info_frame)
         self.create_appointment_details_widgets(appointment_details_frame)
         self.create_notes_widgets(notes_frame)
@@ -70,28 +73,49 @@ class AppointmentApp(tk.Frame):
             "Tuesday": "الثلاثاء", "Wednesday": "الأربعاء", "Thursday": "الخميس", "Friday": "الجمعة"
         }
         day_str_ar = arabic_day.get(day_str, day_str)
-
         full_str = f"{day_str_ar} {date_str}   الوقت: {time_str}"
         self.time_label.config(text=full_str)
         self.after(1000, self.update_time)
 
     def save_appointment(self):
-        print("جاري حفظ الموعد...")
+        # جمع جميع البيانات من الحقول
         appointment_data = {}
         for name, widget_info in self.entry_widgets.items():
             widget = widget_info['widget']
             if widget_info['type'] == 'text':
-                appointment_data[name] = widget.get("1.0", "end-1c")
+                appointment_data[name] = widget.get("1.0", "end-1c").strip()
             else:
-                appointment_data[name] = widget.get()
+                appointment_data[name] = widget.get().strip()
 
-        print(f"بيانات الموعد المحفوظة: {appointment_data}")
-        self.appointment_id += 1
-        self.appointment_id_var.set(str(self.appointment_id))
-        self.clear_fields()
+        # إذا لم يكن current_patient_id موجودًا، ابحث باستخدام رقم الهاتف أو اللقب
+        contact = appointment_data.get("رقم الهاتف", "")
+        last_name = appointment_data.get("لقب المريض", "")
+        patient = self.hospital_handler.find_patient_by_contact_or_lastname(contact , last_name)
+        if  patient.empty:
+            messagebox.showerror("خطأ", "لم يتم العثور على المريض. الرجاء التحقق من المعلومات.")
+            return
+        self.current_patient_id = patient["ID"]    
 
-    def view_images(self):
-        print("عرض الصور...")
+        # ربط البيانات بالأعمدة في جدول المواعيد
+        mapped_data = {
+            "AppointmentDate": appointment_data.get("تاريخ الموعد", ""),
+            "Condition": appointment_data.get("ملاحظات", ""),
+            "Treatment": appointment_data.get("العلاج", ""),
+            "Symptoms": appointment_data.get("الأعراض", ""),
+            "Notes": appointment_data.get("ملاحظات", ""),
+            "NextAppointment": appointment_data.get("تاريخ الموعد القادم", ""),
+            "Cost": appointment_data.get("المبلغ المدفوع", "0"),
+            "CostRested": appointment_data.get("المبلغ المتبقي", "0")
+        }
+
+        # أضف الموعد
+        new_id = self.appointment_handler.add_appointment(self.current_patient_id, mapped_data)
+        if new_id:
+            messagebox.showinfo("تم", "تم حفظ الموعد بنجاح.")
+            self.appointment_id += 1
+            self.appointment_id_var.set(str(self.appointment_id))
+            self.clear_fields()
+
 
     def right_align_text(self, event):
         widget = event.widget
@@ -113,25 +137,22 @@ class AppointmentApp(tk.Frame):
     def create_patient_info_widgets(self, parent):
         parent.columnconfigure(0, weight=1)
         parent.columnconfigure(1, weight=0)
-        fields = ["رقم الموعد", "اسم المريض", "لقب المريض", "الجنس", "العمر", "رقم الهاتف", "المبلغ المدفوع", "المبلغ المتبقي"]
-
+        fields = ["رقم الموعد", "اسم المريض", "لقب المريض",  "رقم الهاتف", "المبلغ المدفوع", "المبلغ المتبقي"]
         self.appointment_id_var = tk.StringVar(value=str(self.appointment_id))
-        self.add_widget(parent, fields[0], 'entry', 0,   textvariable=self.appointment_id_var)
-
+        self.add_widget(parent, fields[0], 'entry', 0,state = 'readonly', textvariable=self.appointment_id_var)
         for i, field in enumerate(fields[1:], start=1):
             self.add_widget(parent, field, 'entry', i)
 
     def create_appointment_details_widgets(self, parent):
         parent.columnconfigure(0, weight=1)
         parent.columnconfigure(1, weight=0)
-
-        self.add_widget(parent, "تاريخ الموعد:", 'date', 0)
-        self.add_widget(parent, "الوقت:", 'entry', 1)
-        self.add_widget(parent, "تاريخ الموعد القادم:", 'date', 2)
+        self.add_widget(parent, "تاريخ الموعد", 'date', 0)
+        self.add_widget(parent, "الوقت", 'entry', 1)
+        self.add_widget(parent, "تاريخ الموعد القادم", 'date', 2)
 
     def create_notes_widgets(self, parent):
         parent.columnconfigure(0, weight=1)
-        text_fields = ["ملاحظات:", "العلاج:", "الأعراض:"]
+        text_fields = ["ملاحظات", "العلاج", "الأعراض"]
         for i, field in enumerate(text_fields):
             parent.rowconfigure(i*2, weight=0)
             parent.rowconfigure(i*2 + 1, weight=1)
@@ -169,12 +190,13 @@ class AppointmentApp(tk.Frame):
         button_container = tk.Frame(parent, bg=self['bg'])
         button_container.pack()
         buttons_layout = [
-            ("الموعد التالي", "الموعد السابق", "تعديل البيانات"),
-            ("عرض الصور", "حذف موعد", "إنهاء")
+            ("حفظ الموعد", "الموعد التالي", "الموعد السابق"),
+            ("حذف موعد", "تعديل البيانات" , "إنهاء")
         ]
 
         commands = {
-            "عرض الصور": self.view_images,
+            "حفظ الموعد": self.save_appointment,
+            "تعديل البيانات": self.save_appointment,
             "إنهاء": self.controller.quit if hasattr(self.controller, 'quit') else self.quit
         }
 
@@ -183,3 +205,4 @@ class AppointmentApp(tk.Frame):
                 cmd = commands.get(btn_text)
                 button = ttk.Button(button_container, text=btn_text, width=15, command=cmd)
                 button.grid(row=row_idx, column=col_idx, padx=5, pady=5, ipady=5)
+

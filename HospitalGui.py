@@ -1,6 +1,7 @@
 from tkinter import ttk, messagebox, filedialog
 import tkinter as tk
-from HospitalClass import Hospital
+from HospitalClass1 import Hospital
+
 from tkcalendar import DateEntry
 from datetime import datetime
 from PIL import Image, ImageTk
@@ -114,7 +115,7 @@ class HospitalGUI(tk.Frame):
                 appointment_date = row.get("AppointmentDate", "")
                 self.tree.insert("", "end", values=(
                     "", display_id, row["ID"], row["FirstName"], row["LastName"],
-                    row["Age"], row["Gender"], row["Condition"], row["Contact"],
+                    row["Age"], row["Gender"], "", row["Contact"],
                     appointment_date, row["DateAdded"], row["LastModified"]
                 ), tags=(tag,))
         except Exception as e:

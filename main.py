@@ -1,6 +1,6 @@
 import tkinter as tk
 from HospitalGui import HospitalGUI
-from home import AppointmentApp
+from home1 import AppointmentApp
 
 # التطبيق الأساسي
 class App(tk.Tk):
