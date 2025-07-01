@@ -167,7 +167,7 @@ class HospitalGUI(tk.Frame):
         add_window = tk.Toplevel(self.master)
         add_window.title("إضافة مريض")
         add_window.geometry("700x600")
-        add_window.transient(self.root)
+        add_window.transient(self)
         add_window.grab_set()
         
         # Main container with scrollable frame
@@ -312,10 +312,10 @@ class HospitalGUI(tk.Frame):
             messagebox.showerror("خطأ", "لم يتم اختيار مريض")
             return
         
-        update_window = tk.Toplevel(self.root)
+        update_window = tk.Toplevel(self)
         update_window.title("تحديث بيانات المريض")
         update_window.geometry("700x600")
-        update_window.transient(self.root)
+        update_window.transient(self)
         update_window.grab_set()
         
         # Main container

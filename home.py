@@ -2,7 +2,6 @@ import tkinter as tk
 from tkinter import ttk
 from datetime import datetime
 from tkcalendar import DateEntry
-import webbrowser
 
 class AppointmentApp(tk.Frame):
     def __init__(self, parent, controller):
@@ -29,40 +28,30 @@ class AppointmentApp(tk.Frame):
     def create_top_bar(self , controller):
         top_bar = tk.Frame(self, bg="#c5d6e2", height=40)
         ttk.Button(top_bar, text="ادارة", command=lambda: controller.show_frame("HospitalGUI")).pack(side="left", padx=5, pady=5)
-
         top_bar.pack(fill="x", side="top")
-
         self.time_label = tk.Label(top_bar, font=("Arial", 12), bg=top_bar['bg'])
         self.time_label.pack(side="left", padx=20, pady=5)
-
         title_label = tk.Label(top_bar, text="عيادة الأسنان", font=("Arial", 14, "bold"), bg=top_bar['bg'])
         title_label.pack(side="right", padx=20, pady=5)
-
         settings_button = ttk.Button(top_bar, text="الإعدادات")
         settings_button.pack(side="right", padx=5)
 
     def create_main_content(self):
         main_frame = tk.Frame(self, bg=self['bg'])
         main_frame.pack(fill="both", expand=True, padx=10, pady=10)
-
         main_frame.columnconfigure(0, weight=3, minsize=400)
         main_frame.columnconfigure(1, weight=2, minsize=300)
         main_frame.rowconfigure(0, weight=1)
         main_frame.rowconfigure(1, weight=2)
         main_frame.rowconfigure(2, weight=0)
-
         patient_info_frame = self.create_frame(main_frame, "بيانات المريض")
         patient_info_frame.grid(row=0, column=1, rowspan=2, sticky="nsew", padx=5, pady=5)
-
         appointment_details_frame = self.create_frame(main_frame, "تفاصيل الموعد")
         appointment_details_frame.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
-
         notes_frame = self.create_frame(main_frame, "التشخيص والعلاج")
         notes_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
-
         buttons_frame = tk.Frame(main_frame, bg=self['bg'])
         buttons_frame.grid(row=2, column=0, columnspan=2, sticky="ew", pady=10)
-
         self.create_patient_info_widgets(patient_info_frame)
         self.create_appointment_details_widgets(appointment_details_frame)
         self.create_notes_widgets(notes_frame)
@@ -127,7 +116,7 @@ class AppointmentApp(tk.Frame):
         fields = ["رقم الموعد", "اسم المريض", "لقب المريض", "الجنس", "العمر", "رقم الهاتف", "المبلغ المدفوع", "المبلغ المتبقي"]
 
         self.appointment_id_var = tk.StringVar(value=str(self.appointment_id))
-        self.add_widget(parent, fields[0], 'entry', 0, state='readonly', textvariable=self.appointment_id_var)
+        self.add_widget(parent, fields[0], 'entry', 0,state='readonly',   textvariable=self.appointment_id_var)
 
         for i, field in enumerate(fields[1:], start=1):
             self.add_widget(parent, field, 'entry', i)

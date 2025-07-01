@@ -2,7 +2,10 @@ import sqlite3
 import pandas as pd
 import json
 from tkinter import ttk, messagebox, filedialog
-
+def connectToDb(fileName):
+    conn = sqlite3.connect(fileName)
+    return conn ,conn.cursor()
+    
 # Database class for managing patients
 class Hospital:
     def __init__(self, db_file="patients.db"):
@@ -10,9 +13,7 @@ class Hospital:
         self.setup_database()
         
     def setup_database(self):
-        conn = sqlite3.connect(self.db_file)
-        cursor = conn.cursor()
-        
+        conn , cursor = connectToDb(self.db_file)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS patients (
                 ID INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -29,7 +30,6 @@ class Hospital:
                 Deleted INTEGER DEFAULT 0
             )
         ''')
-        
         # Check if Photos and AppointmentDate columns exist, if not add them
         cursor.execute("PRAGMA table_info(patients)")
         columns = [column[1] for column in cursor.fetchall()]
@@ -44,7 +44,7 @@ class Hospital:
     
     def get_all_patients(self):
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn= connectToDb(self.db_file)[0]
             # Order by ID DESC to show newest first
             df = pd.read_sql_query("SELECT * FROM patients WHERE Deleted = 0 ORDER BY ID DESC LIMIT 3000", conn)
             conn.close()
@@ -54,8 +54,7 @@ class Hospital:
             return pd.DataFrame()
     
     def get_total_patients(self):
-        conn = sqlite3.connect(self.db_file)
-        cursor = conn.cursor()
+        conn , cursor = connectToDb(self.db_file)
         cursor.execute("SELECT COUNT(*) FROM patients WHERE Deleted = 0")
         total = cursor.fetchone()[0]
         conn.close()
@@ -75,7 +74,7 @@ class Hospital:
         params.extend([per_page, offset])
         
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn  = connectToDb(self.db_file)[0]
             df = pd.read_sql_query(query, conn, params=params)
             conn.close()
             return df
@@ -94,9 +93,7 @@ class Hospital:
 
             # Convert photos list to JSON string
             photos_json = json.dumps(data.get("Photos", []))
-
-            conn = sqlite3.connect(self.db_file)
-            cursor = conn.cursor()
+            conn , cursor = connectToDb(self.db_file)
             cursor.execute("""
                 INSERT INTO patients (FirstName, LastName, Age, Gender, Condition, Contact, Photos, AppointmentDate)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -122,9 +119,7 @@ class Hospital:
 
             # Convert photos list to JSON string
             photos_json = json.dumps(new_data.get("Photos", []))
-
-            conn = sqlite3.connect(self.db_file)
-            cursor = conn.cursor()
+            conn , cursor = connectToDb(self.db_file)
             cursor.execute("""
                 UPDATE patients 
                 SET FirstName=?, LastName=?, Age=?, Gender=?, Condition=?, Contact=?, Photos=?, AppointmentDate=?, LastModified=CURRENT_TIMESTAMP
@@ -142,8 +137,7 @@ class Hospital:
     
     def delete_patient(self, patient_id):
         try:
-            conn = sqlite3.connect(self.db_file)
-            cursor = conn.cursor()
+            conn , cursor = connectToDb(self.db_file)
             cursor.execute("UPDATE patients SET Deleted = 1 WHERE ID=?", (patient_id,))
             conn.commit()
             conn.close()
@@ -157,9 +151,7 @@ class Hospital:
     def import_data(self, file_path):
         try:
             df = pd.read_excel(file_path)
-            conn = sqlite3.connect(self.db_file)
-            cursor = conn.cursor()
-            
+            conn , cursor = connectToDb(self.db_file)
             expected_columns = ["FirstName", "LastName", "Age", "Gender", "Condition", "Contact"]
             if not all(col in df.columns for col in expected_columns[:4]):
                 messagebox.showerror("خطأ", "يجب أن يحتوي ملف الإكسل على الأعمدة: الاسم الأول، اسم العائلة، العمر، الجنس")
@@ -184,5 +176,3 @@ class Hospital:
         except Exception as e:
             messagebox.showerror("خطأ", f"حدث خطأ أثناء الاستيراد: {e}")
             return False
-        
-c  = Hospital()
